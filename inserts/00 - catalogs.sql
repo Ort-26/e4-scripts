@@ -1,7 +1,7 @@
 -- =========================================================
 -- status
 -- =========================================================
-INSERT INTO cat_ticket_statuses (code, name, description) VALUES
+INSERT INTO cat_ticket_statuses (status_code, status_name, status_desc) VALUES
 ('CREATED', 'Created', 'Ticket was created by the client'),
 ('ASSIGNED', 'Assigned', 'Ticket was assigned to an agent'),
 ('IN_PROGRESS', 'In Progress', 'Ticket is being actively worked on'),
@@ -13,10 +13,10 @@ INSERT INTO cat_ticket_statuses (code, name, description) VALUES
 -- =========================================================
 -- roles
 -- =========================================================
-INSERT INTO cat_roles (code, name, description) VALUES
-('CLIENT', 'Client', 'User who creates and follows up support tickets'),
-('AGENT', 'Agent', 'Support agent who manages assigned tickets'),
-('ADMIN', 'Admin', 'Administrator with full ticket management permissions');
+INSERT INTO cat_roles (role_name, role_desc) VALUES
+('CLIENT', 'User who creates and follows up support tickets'),
+('AGENT', 'Support agent who manages assigned tickets'),
+('ADMIN', 'Administrator with full ticket management permissions');
 
 
 -- =========================================================
@@ -230,79 +230,79 @@ AND NOT EXISTS (
 -- status_transitions
 -- =========================================================
 
-INSERT INTO ticket_status_transitions (
-    from_status_id,
-    to_status_id,
+INSERT INTO ctl_ticket_status_transitions (
+    from_status,
+    to_status,
     role_id
 )
-SELECT fs.id, ts.id, r.id
+SELECT fs.status_id, ts.status_id, r.role_id
 FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.code = 'ASSIGNED'
-JOIN cat_roles r ON r.code = 'ADMIN'
-WHERE fs.code = 'CREATED';
+JOIN cat_ticket_statuses ts ON ts.status_code = 'ASSIGNED'
+JOIN cat_roles r ON r.role_name = 'ADMIN'
+WHERE fs.status_code = 'CREATED';
 
-INSERT INTO ticket_status_transitions (
-    from_status_id,
-    to_status_id,
+INSERT INTO ctl_ticket_status_transitions (
+    from_status,
+    to_status,
     role_id
 )
-SELECT fs.id, ts.id, r.id
+SELECT fs.status_id, ts.status_id, r.role_id
 FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.code = 'IN_PROGRESS'
-JOIN cat_roles r ON r.code = 'AGENT'
-WHERE fs.code = 'ASSIGNED';
+JOIN cat_ticket_statuses ts ON ts.status_code = 'IN_PROGRESS'
+JOIN cat_roles r ON r.role_name = 'AGENT'
+WHERE fs.status_code = 'ASSIGNED';
 
-INSERT INTO ticket_status_transitions (
-    from_status_id,
-    to_status_id,
+INSERT INTO ctl_ticket_status_transitions (
+    from_status,
+    to_status,
     role_id
 )
-SELECT fs.id, ts.id, r.id
+SELECT fs.status_id, ts.status_id, r.role_id
 FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.code = 'WAITING_FOR_CLIENT'
-JOIN cat_roles r ON r.code = 'AGENT'
-WHERE fs.code = 'IN_PROGRESS';
+JOIN cat_ticket_statuses ts ON ts.status_code = 'WAITING_FOR_CLIENT'
+JOIN cat_roles r ON r.role_name = 'AGENT'
+WHERE fs.status_code = 'IN_PROGRESS';
 
-INSERT INTO ticket_status_transitions (
-    from_status_id,
-    to_status_id,
+INSERT INTO ctl_ticket_status_transitions (
+    from_status,
+    to_status,
     role_id
 )
-SELECT fs.id, ts.id, r.id
+SELECT fs.status_id, ts.status_id, r.role_id
 FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.code = 'IN_PROGRESS'
-JOIN cat_roles r ON r.code = 'CLIENT'
-WHERE fs.code = 'WAITING_FOR_CLIENT';
+JOIN cat_ticket_statuses ts ON ts.status_code = 'IN_PROGRESS'
+JOIN cat_roles r ON r.role_name = 'CLIENT'
+WHERE fs.status_code = 'WAITING_FOR_CLIENT';
 
-INSERT INTO ticket_status_transitions (
-    from_status_id,
-    to_status_id,
+INSERT INTO ctl_ticket_status_transitions (
+    from_status,
+    to_status,
     role_id
 )
-SELECT fs.id, ts.id, r.id
+SELECT fs.status_id, ts.status_id, r.role_id
 FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.code = 'RESOLVED'
-JOIN cat_roles r ON r.code = 'CLIENT'
-WHERE fs.code = 'WAITING_FOR_CLIENT';
+JOIN cat_ticket_statuses ts ON ts.status_code = 'RESOLVED'
+JOIN cat_roles r ON r.role_name = 'CLIENT'
+WHERE fs.status_code = 'WAITING_FOR_CLIENT';
 
-INSERT INTO ticket_status_transitions (
-    from_status_id,
-    to_status_id,
+INSERT INTO ctl_ticket_status_transitions (
+    from_status,
+    to_status,
     role_id
 )
-SELECT fs.id, ts.id, r.id
+SELECT fs.status_id, ts.status_id, r.role_id
 FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.code = 'RESOLVED'
-JOIN cat_roles r ON r.code = 'AGENT'
-WHERE fs.code = 'IN_PROGRESS';
+JOIN cat_ticket_statuses ts ON ts.status_code = 'RESOLVED'
+JOIN cat_roles r ON r.role_name = 'AGENT'
+WHERE fs.status_code = 'IN_PROGRESS';
 
-INSERT INTO ticket_status_transitions (
-    from_status_id,
-    to_status_id,
+INSERT INTO ctl_ticket_status_transitions (
+    from_status,
+    to_status,
     role_id
 )
-SELECT fs.id, ts.id, r.id
+SELECT fs.status_id, ts.status_id, r.role_id
 FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.code = 'CLOSED'
-JOIN cat_roles r ON r.code = 'ADMIN'
-WHERE fs.code = 'RESOLVED';
+JOIN cat_ticket_statuses ts ON ts.status_code = 'CLOSED'
+JOIN cat_roles r ON r.role_name = 'ADMIN'
+WHERE fs.status_code = 'RESOLVED';

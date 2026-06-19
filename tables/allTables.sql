@@ -31,6 +31,7 @@ CREATE TABLE mas_users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     role_id INTEGER,
+    hash_password VARCHAR(500) NOT NULL,
     CONSTRAINT fk_mas_users_cat_roles FOREIGN KEY (role_id) 
         REFERENCES cat_roles(role_id)
 );
@@ -107,7 +108,7 @@ CREATE TABLE mas_tickets_comments (
 
 CREATE TABLE his_ticket_status_changes (
     his_change_id SERIAL PRIMARY KEY, 
-    ticket_id INTEGER PRIMARY KEY, 
+    ticket_id INTEGER, 
     old_status INTEGER,
     new_status INTEGER,
     changed_by INTEGER,

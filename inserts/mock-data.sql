@@ -1,0 +1,554 @@
+-- BEGIN;
+
+-- -- =========================================================
+-- -- 0. Ajuste requerido porque mas_users.hash_password es NOT NULL
+-- --    y el usuario pidió no insertar hash_password.
+-- -- =========================================================
+-- ALTER TABLE mas_users 
+-- ALTER COLUMN hash_password DROP NOT NULL;
+
+-- -- =========================================================
+-- -- 1. Tabla temporal para conservar IDs generados
+-- -- =========================================================
+-- CREATE TEMP TABLE tmp_seed_refs (
+--     ref_key VARCHAR(50) PRIMARY KEY,
+--     ref_id INTEGER NOT NULL
+-- ) ON COMMIT DROP;
+
+-- -- =========================================================
+-- -- 2. Crear usuarios demo por rol
+-- -- =========================================================
+
+-- WITH inserted_user AS (
+--     INSERT INTO mas_users (
+--         user_name,
+--         user_lastname,
+--         email,
+--         role_id
+--     )
+--     VALUES (
+--         'Carlos',
+--         'Cliente Demo',
+--         'cliente.demo@cloudops.local',
+--         (
+--             SELECT role_id 
+--             FROM cat_roles 
+--             WHERE role_name = 'CLIENT'
+--         )
+--     )
+--     RETURNING user_id
+-- )
+-- INSERT INTO tmp_seed_refs (ref_key, ref_id)
+-- SELECT 'client_user', user_id
+-- FROM inserted_user;
+
+
+-- WITH inserted_user AS (
+--     INSERT INTO mas_users (
+--         user_name,
+--         user_lastname,
+--         email,
+--         role_id
+--     )
+--     VALUES (
+--         'Ana',
+--         'Agente Demo',
+--         'agente.demo@cloudops.local',
+--         (
+--             SELECT role_id 
+--             FROM cat_roles 
+--             WHERE role_name = 'AGENT'
+--         )
+--     )
+--     RETURNING user_id
+-- )
+-- INSERT INTO tmp_seed_refs (ref_key, ref_id)
+-- SELECT 'agent_user', user_id
+-- FROM inserted_user;
+
+
+-- WITH inserted_user AS (
+--     INSERT INTO mas_users (
+--         user_name,
+--         user_lastname,
+--         email,
+--         role_id
+--     )
+--     VALUES (
+--         'Admin',
+--         'Sistema',
+--         'admin.demo@cloudops.local',
+--         (
+--             SELECT role_id 
+--             FROM cat_roles 
+--             WHERE role_name = 'ADMIN'
+--         )
+--     )
+--     RETURNING user_id
+-- )
+-- INSERT INTO tmp_seed_refs (ref_key, ref_id)
+-- SELECT 'admin_user', user_id
+-- FROM inserted_user;
+
+-- -- =========================================================
+-- -- 3. Crear ticket inicial en estado CREATED
+-- -- =========================================================
+
+-- WITH inserted_ticket AS (
+--     INSERT INTO mas_tickets (
+--         ticket_title,
+--         ticket_desc,
+--         status_id
+--     )
+--     VALUES (
+--         'No puedo acceder al dashboard de CloudOps Switchboard',
+--         'El usuario reporta que al iniciar sesión correctamente, el dashboard queda cargando y no muestra los proyectos disponibles.',
+--         (
+--             SELECT status_id
+--             FROM cat_ticket_statuses
+--             WHERE status_code = 'CREATED'
+--         )
+--     )
+--     RETURNING ticket_id
+-- )
+-- INSERT INTO tmp_seed_refs (ref_key, ref_id)
+-- SELECT 'demo_ticket', ticket_id
+-- FROM inserted_ticket;
+
+-- -- =========================================================
+-- -- 4. Asociar ticket con cliente y agente
+-- -- =========================================================
+
+-- INSERT INTO mas_tickets_mas_users (
+--     user_id,
+--     ticket_id
+-- )
+-- VALUES 
+-- (
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'client_user'
+--     ),
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     )
+-- ),
+-- (
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'agent_user'
+--     ),
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     )
+-- );
+
+-- -- =========================================================
+-- -- 5. Historial de asignación
+-- --    Admin asigna el ticket al agente.
+-- -- =========================================================
+
+-- INSERT INTO his_assignation_changes (
+--     ticket_id,
+--     old_user,
+--     new_user,
+--     changed_by
+-- )
+-- VALUES (
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     ),
+--     NULL,
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'agent_user'
+--     ),
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'admin_user'
+--     )
+-- );
+
+-- -- =========================================================
+-- -- 6. Cambio de estado: CREATED -> ASSIGNED
+-- -- =========================================================
+
+-- INSERT INTO his_ticket_status_changes (
+--     ticket_id,
+--     old_status,
+--     new_status,
+--     changed_by,
+--     status_id
+-- )
+-- VALUES (
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'CREATED'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'ASSIGNED'
+--     ),
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'admin_user'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'ASSIGNED'
+--     )
+-- );
+
+-- UPDATE mas_tickets
+-- SET 
+--     status_id = (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'ASSIGNED'
+--     ),
+--     updated_at = CURRENT_TIMESTAMP
+-- WHERE ticket_id = (
+--     SELECT ref_id 
+--     FROM tmp_seed_refs 
+--     WHERE ref_key = 'demo_ticket'
+-- );
+
+-- -- =========================================================
+-- -- 7. Comentario del cliente
+-- -- =========================================================
+
+-- WITH inserted_comment AS (
+--     INSERT INTO mas_comments (
+--         content,
+--         commented_by
+--     )
+--     VALUES (
+--         'Hola, ya intenté cerrar sesión, limpiar caché y volver a entrar, pero el dashboard sigue cargando indefinidamente.',
+--         (
+--             SELECT ref_id 
+--             FROM tmp_seed_refs 
+--             WHERE ref_key = 'client_user'
+--         )
+--     )
+--     RETURNING comment_id
+-- )
+-- INSERT INTO mas_tickets_comments (
+--     ticket_id,
+--     comment_id
+-- )
+-- SELECT 
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     ),
+--     comment_id
+-- FROM inserted_comment;
+
+-- -- =========================================================
+-- -- 8. Cambio de estado: ASSIGNED -> IN_PROGRESS
+-- -- =========================================================
+
+-- INSERT INTO his_ticket_status_changes (
+--     ticket_id,
+--     old_status,
+--     new_status,
+--     changed_by,
+--     status_id
+-- )
+-- VALUES (
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'ASSIGNED'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'IN_PROGRESS'
+--     ),
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'agent_user'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'IN_PROGRESS'
+--     )
+-- );
+
+-- UPDATE mas_tickets
+-- SET 
+--     status_id = (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'IN_PROGRESS'
+--     ),
+--     updated_at = CURRENT_TIMESTAMP
+-- WHERE ticket_id = (
+--     SELECT ref_id 
+--     FROM tmp_seed_refs 
+--     WHERE ref_key = 'demo_ticket'
+-- );
+
+-- -- =========================================================
+-- -- 9. Comentario del agente
+-- -- =========================================================
+
+-- WITH inserted_comment AS (
+--     INSERT INTO mas_comments (
+--         content,
+--         commented_by
+--     )
+--     VALUES (
+--         'Gracias por el detalle. Revisé los logs y parece que el servicio de proyectos responde correctamente, pero el frontend está recibiendo una respuesta vacía para tu usuario. Voy a validar tus permisos RBAC.',
+--         (
+--             SELECT ref_id 
+--             FROM tmp_seed_refs 
+--             WHERE ref_key = 'agent_user'
+--         )
+--     )
+--     RETURNING comment_id
+-- )
+-- INSERT INTO mas_tickets_comments (
+--     ticket_id,
+--     comment_id
+-- )
+-- SELECT 
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     ),
+--     comment_id
+-- FROM inserted_comment;
+
+-- -- =========================================================
+-- -- 10. Cambio de estado: IN_PROGRESS -> WAITING_FOR_CLIENT
+-- -- =========================================================
+
+-- INSERT INTO his_ticket_status_changes (
+--     ticket_id,
+--     old_status,
+--     new_status,
+--     changed_by,
+--     status_id
+-- )
+-- VALUES (
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'IN_PROGRESS'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'WAITING_FOR_CLIENT'
+--     ),
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'agent_user'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'WAITING_FOR_CLIENT'
+--     )
+-- );
+
+-- UPDATE mas_tickets
+-- SET 
+--     status_id = (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'WAITING_FOR_CLIENT'
+--     ),
+--     updated_at = CURRENT_TIMESTAMP
+-- WHERE ticket_id = (
+--     SELECT ref_id 
+--     FROM tmp_seed_refs 
+--     WHERE ref_key = 'demo_ticket'
+-- );
+
+-- -- =========================================================
+-- -- 11. Comentario del agente solicitando validación
+-- -- =========================================================
+
+-- WITH inserted_comment AS (
+--     INSERT INTO mas_comments (
+--         content,
+--         commented_by
+--     )
+--     VALUES (
+--         'Detecté que tu usuario no tenía asociado el permiso para consultar proyectos. Ya fue corregido. ¿Puedes intentar ingresar nuevamente y confirmar si el dashboard carga correctamente?',
+--         (
+--             SELECT ref_id 
+--             FROM tmp_seed_refs 
+--             WHERE ref_key = 'agent_user'
+--         )
+--     )
+--     RETURNING comment_id
+-- )
+-- INSERT INTO mas_tickets_comments (
+--     ticket_id,
+--     comment_id
+-- )
+-- SELECT 
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     ),
+--     comment_id
+-- FROM inserted_comment;
+
+-- -- =========================================================
+-- -- 12. Comentario del cliente confirmando
+-- -- =========================================================
+
+-- WITH inserted_comment AS (
+--     INSERT INTO mas_comments (
+--         content,
+--         commented_by
+--     )
+--     VALUES (
+--         'Confirmo que ya puedo acceder al dashboard y visualizar los proyectos. Gracias.',
+--         (
+--             SELECT ref_id 
+--             FROM tmp_seed_refs 
+--             WHERE ref_key = 'client_user'
+--         )
+--     )
+--     RETURNING comment_id
+-- )
+-- INSERT INTO mas_tickets_comments (
+--     ticket_id,
+--     comment_id
+-- )
+-- SELECT 
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     ),
+--     comment_id
+-- FROM inserted_comment;
+
+-- -- =========================================================
+-- -- 13. Cambio de estado: WAITING_FOR_CLIENT -> RESOLVED
+-- -- =========================================================
+
+-- INSERT INTO his_ticket_status_changes (
+--     ticket_id,
+--     old_status,
+--     new_status,
+--     changed_by,
+--     status_id
+-- )
+-- VALUES (
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'WAITING_FOR_CLIENT'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'RESOLVED'
+--     ),
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'client_user'
+--     ),
+--     (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'RESOLVED'
+--     )
+-- );
+
+-- UPDATE mas_tickets
+-- SET 
+--     status_id = (
+--         SELECT status_id 
+--         FROM cat_ticket_statuses 
+--         WHERE status_code = 'RESOLVED'
+--     ),
+--     updated_at = CURRENT_TIMESTAMP
+-- WHERE ticket_id = (
+--     SELECT ref_id 
+--     FROM tmp_seed_refs 
+--     WHERE ref_key = 'demo_ticket'
+-- );
+
+-- -- =========================================================
+-- -- 14. Comentario final del admin
+-- -- =========================================================
+
+-- WITH inserted_comment AS (
+--     INSERT INTO mas_comments (
+--         content,
+--         commented_by
+--     )
+--     VALUES (
+--         'Se valida resolución del incidente. El ticket queda resuelto con causa raíz asociada a permisos RBAC incompletos para el usuario cliente.',
+--         (
+--             SELECT ref_id 
+--             FROM tmp_seed_refs 
+--             WHERE ref_key = 'admin_user'
+--         )
+--     )
+--     RETURNING comment_id
+-- )
+-- INSERT INTO mas_tickets_comments (
+--     ticket_id,
+--     comment_id
+-- )
+-- SELECT 
+--     (
+--         SELECT ref_id 
+--         FROM tmp_seed_refs 
+--         WHERE ref_key = 'demo_ticket'
+--     ),
+--     comment_id
+-- FROM inserted_comment;
+
+-- COMMIT;
