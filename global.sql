@@ -3,7 +3,7 @@
 -- ============================================================
 
 -- File: tables/allTables.sql
---DB: cloudops-swb-db
+--DB: e4-support-db
 
 -- 1. CATÁLOGOS BASE (Tablas maestras independientes)
 
@@ -36,6 +36,7 @@ CREATE TABLE mas_users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     role_id INTEGER,
+    hash_password VARCHAR(500) NOT NULL,
     CONSTRAINT fk_mas_users_cat_roles FOREIGN KEY (role_id) 
         REFERENCES cat_roles(role_id)
 );
@@ -47,6 +48,7 @@ CREATE TABLE mas_tickets (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status_id INTEGER,
+    agent_id INTEGER DEFAULT NULL,
     CONSTRAINT fk_mas_tickets_cat_ticket_statuses FOREIGN KEY (status_id) 
         REFERENCES cat_ticket_statuses(status_id)
 );
@@ -64,27 +66,36 @@ CREATE TABLE mas_comments (
 -- 3. TABLAS DE CONTROL Y TRANSICIONES
 
 CREATE TABLE ctl_ticket_status_transitions (
-    transition_id SERIAL PRIMARY KEY, -- Modificado a SERIAL
-    from_status INTEGER,
-    to_status INTEGER,
-    role_id INTEGER,
-    CONSTRAINT fk_ctl_transitions_from_status FOREIGN KEY (from_status) 
+    transition_id SERIAL PRIMARY KEY,
+    from_status INTEGER NOT NULL,
+    to_status INTEGER NOT NULL,
+    permission_id INTEGER NOT NULL,
+
+    CONSTRAINT fk_ctl_transitions_from_status 
+        FOREIGN KEY (from_status) 
         REFERENCES cat_ticket_statuses(status_id),
-    CONSTRAINT fk_ctl_transitions_to_status FOREIGN KEY (to_status) 
+
+    CONSTRAINT fk_ctl_transitions_to_status 
+        FOREIGN KEY (to_status) 
         REFERENCES cat_ticket_statuses(status_id),
-    CONSTRAINT fk_ctl_transitions_cat_roles FOREIGN KEY (role_id) 
-        REFERENCES cat_roles(role_id)
+
+    CONSTRAINT fk_ctl_transitions_cat_permissions 
+        FOREIGN KEY (permission_id) 
+        REFERENCES cat_permissions(permission_id),
+
+    CONSTRAINT uq_ticket_status_transition_permission 
+        UNIQUE (from_status, to_status, permission_id)
 );
 
 -- 4. TABLAS INTERMEDIAS (Se mantienen con INTEGER para la PK compuesta)
 
-CREATE TABLE cat_permissions_roles (
+CREATE TABLE ctl_roles_permissions (
     permission_id INTEGER,
     role_id INTEGER,
     PRIMARY KEY (permission_id, role_id),
-    CONSTRAINT fk_cat_permissions_roles_cat_permissions FOREIGN KEY (permission_id) 
+    CONSTRAINT fk_ctl_roles_permissions_cat_permissions FOREIGN KEY (permission_id) 
         REFERENCES cat_permissions(permission_id),
-    CONSTRAINT fk_cat_permissions_roles_cat_roles FOREIGN KEY (role_id) 
+    CONSTRAINT fk_ctl_roles_permissions_cat_roles FOREIGN KEY (role_id) 
         REFERENCES cat_roles(role_id)
 );
 
@@ -92,9 +103,9 @@ CREATE TABLE mas_tickets_mas_users (
     user_id INTEGER,
     ticket_id INTEGER,
     PRIMARY KEY (user_id, ticket_id),
-    CONSTRAINT fk_mas_tickets_users_mas_users FOREIGN KEY (user_id) 
+    CONSTRAINT fk_mas_tickets_mas_users_mas_users FOREIGN KEY (user_id) 
         REFERENCES mas_users(user_id),
-    CONSTRAINT fk_mas_tickets_users_mas_tickets FOREIGN KEY (ticket_id) 
+    CONSTRAINT fk_mas_tickets_mas_users_mas_tickets FOREIGN KEY (ticket_id) 
         REFERENCES mas_tickets(ticket_id)
 );
 
@@ -142,7 +153,7 @@ CREATE TABLE his_assignation_changes (
 -- INSERTS
 -- ============================================================
 
--- File: inserts/init.sql
+-- File: inserts/A0 - catalogs.sql
 -- =========================================================
 -- status
 -- =========================================================
@@ -152,7 +163,8 @@ INSERT INTO cat_ticket_statuses (status_code, status_name, status_desc) VALUES
 ('IN_PROGRESS', 'In Progress', 'Ticket is being actively worked on'),
 ('WAITING_FOR_CLIENT', 'Waiting for Client', 'Ticket requires client response or validation'),
 ('RESOLVED', 'Resolved', 'Ticket was marked as resolved'),
-('CLOSED', 'Closed', 'Ticket was closed and cannot be modified');
+('CLOSED', 'Closed', 'Ticket was closed and cannot be modified')
+ON CONFLICT DO NOTHING;
 
 
 -- =========================================================
@@ -161,296 +173,296 @@ INSERT INTO cat_ticket_statuses (status_code, status_name, status_desc) VALUES
 INSERT INTO cat_roles (role_name, role_desc) VALUES
 ('CLIENT', 'User who creates and follows up support tickets'),
 ('AGENT', 'Support agent who manages assigned tickets'),
-('ADMIN', 'Administrator with full ticket management permissions');
+('ADMIN', 'Administrator with full ticket management permissions')
+ON CONFLICT DO NOTHING;
 
 
 -- =========================================================
 -- permissions
 -- =========================================================
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 1, 'TICKET_CREATE', 'Permite crear tickets'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'TICKET_CREATE'
-);
-
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 2, 'TICKET_READ_OWN', 'Permite consultar tickets propios'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'TICKET_READ_OWN'
-);
-
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 3, 'TICKET_READ_ALL', 'Permite consultar todos los tickets'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'TICKET_READ_ALL'
-);
-
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 4, 'TICKET_UPDATE', 'Permite actualizar información general del ticket'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'TICKET_UPDATE'
-);
-
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 5, 'TICKET_ASSIGN', 'Permite asignar o reasignar tickets'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'TICKET_ASSIGN'
-);
-
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 6, 'TICKET_CHANGE_STATUS', 'Permite cambiar el estado de un ticket'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'TICKET_CHANGE_STATUS'
-);
-
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 7, 'TICKET_CLOSE', 'Permite cerrar tickets'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'TICKET_CLOSE'
-);
-
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 8, 'COMMENT_CREATE', 'Permite agregar comentarios a un ticket'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'COMMENT_CREATE'
-);
-
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 9, 'COMMENT_READ', 'Permite consultar comentarios de un ticket'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'COMMENT_READ'
-);
-
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 10, 'HISTORY_READ', 'Permite consultar historial de cambios del ticket'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'HISTORY_READ'
-);
-
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 11, 'CATALOG_READ', 'Permite consultar catálogos del sistema'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'CATALOG_READ'
-);
-
-INSERT INTO cat_permissions (
-    permission_id,
-    permission_name,
-    permission_desc
-)
-SELECT 12, 'USER_MANAGE', 'Permite administrar usuarios'
-WHERE NOT EXISTS (
-    SELECT 1 FROM cat_permissions WHERE permission_name = 'USER_MANAGE'
-);
+INSERT INTO cat_permissions (permission_name, permission_desc)
+VALUES
+('TICKET_CREATE', 'Can create tickets'),
+('TICKET_READ_OWN', 'Can read own tickets'),
+('TICKET_READ_ALL', 'Can read all tickets'),
+('TICKET_ASSIGN', 'Can assign tickets to agents'),
+('TICKET_START_PROGRESS', 'Can move assigned tickets to in progress'),
+('TICKET_REQUEST_CLIENT_INFO', 'Can request information from the client'),
+('TICKET_CLIENT_RESPOND', 'Can respond when ticket is waiting for client'),
+('TICKET_RESOLVE', 'Can resolve tickets'),
+('TICKET_CLOSE', 'Can close resolved tickets'),
+('TICKET_CLOSE_ANY', 'Can force close tickets from non-final states'),
+('TICKET_COMMENT', 'Can add comments to tickets')
+('TICKET_REOPEN', 'Can reopen a resolved ticket')
+ON CONFLICT DO NOTHING;
 
 -- =========================================================
 -- PERMISOS - ROLES
 -- =========================================================
+-- =========================================================
+-- PERMISSIONS - ROLES
+-- =========================================================
 
--- CLIENT
-INSERT INTO cat_permissions_roles (
-    permission_id,
-    role_id
-)
-SELECT p.permission_id, r.role_id
-FROM cat_permissions p
-JOIN cat_roles r ON r.role_name = 'CLIENT'
-WHERE p.permission_name IN (
-    'TICKET_CREATE',
-    'TICKET_READ_OWN',
-    'TICKET_CHANGE_STATUS',
-    'COMMENT_CREATE',
-    'COMMENT_READ',
-    'HISTORY_READ',
-    'CATALOG_READ'
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM cat_permissions_roles pr
-    WHERE pr.permission_id = p.permission_id
-      AND pr.role_id = r.role_id
-);
-
--- AGENT
-INSERT INTO cat_permissions_roles (
-    permission_id,
-    role_id
-)
-SELECT p.permission_id, r.role_id
-FROM cat_permissions p
-JOIN cat_roles r ON r.role_name = 'AGENT'
-WHERE p.permission_name IN (
-    'TICKET_READ_ALL',
-    'TICKET_UPDATE',
-    'TICKET_ASSIGN',
-    'TICKET_CHANGE_STATUS',
-    'TICKET_CLOSE',
-    'COMMENT_CREATE',
-    'COMMENT_READ',
-    'HISTORY_READ',
-    'CATALOG_READ'
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM cat_permissions_roles pr
-    WHERE pr.permission_id = p.permission_id
-      AND pr.role_id = r.role_id
-);
-
--- ADMIN
-INSERT INTO cat_permissions_roles (
-    permission_id,
-    role_id
-)
-SELECT p.permission_id, r.role_id
-FROM cat_permissions p
-JOIN cat_roles r ON r.role_name = 'ADMIN'
-WHERE p.permission_name IN (
-    'TICKET_CREATE',
-    'TICKET_READ_OWN',
-    'TICKET_READ_ALL',
-    'TICKET_UPDATE',
-    'TICKET_ASSIGN',
-    'TICKET_CHANGE_STATUS',
-    'TICKET_CLOSE',
-    'COMMENT_CREATE',
-    'COMMENT_READ',
-    'HISTORY_READ',
-    'CATALOG_READ',
-    'USER_MANAGE'
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM cat_permissions_roles pr
-    WHERE pr.permission_id = p.permission_id
-      AND pr.role_id = r.role_id
-);
+-- =========================================================
+-- ASSIGN PERMISSIONS TO CLIENT
+-- =========================================================
+INSERT INTO ctl_roles_permissions (role_id, permission_id)
+SELECT r.role_id, p.permission_id
+FROM cat_roles r
+JOIN cat_permissions p 
+    ON p.permission_name IN (
+        'TICKET_CREATE',
+        'TICKET_READ_OWN',
+        'TICKET_CLIENT_RESPOND',
+        'TICKET_CLOSE',
+        'TICKET_COMMENT',
+        'TICKET_REOPEN'
+    )
+WHERE r.role_name = 'CLIENT'
+ON CONFLICT DO NOTHING;
 
 
 -- =========================================================
--- status_transitions
+-- ASSIGN PERMISSIONS TO AGENT
+-- =========================================================
+INSERT INTO ctl_roles_permissions (role_id, permission_id)
+SELECT r.role_id, p.permission_id
+FROM cat_roles r
+JOIN cat_permissions p 
+    ON p.permission_name IN (
+        'TICKET_READ_ALL',
+        'TICKET_START_PROGRESS',
+        'TICKET_REQUEST_CLIENT_INFO',
+        'TICKET_RESOLVE',
+        'TICKET_COMMENT'
+    )
+WHERE r.role_name = 'AGENT'
+ON CONFLICT DO NOTHING;
+
+
+-- =========================================================
+-- ASSIGN PERMISSIONS TO ADMIN
+-- =========================================================
+INSERT INTO ctl_roles_permissions (role_id, permission_id)
+SELECT r.role_id, p.permission_id
+FROM cat_roles r
+JOIN cat_permissions p 
+    ON p.permission_name IN (
+        'TICKET_CREATE',
+        'TICKET_READ_OWN',
+        'TICKET_READ_ALL',
+        'TICKET_ASSIGN',
+        'TICKET_START_PROGRESS',
+        'TICKET_REQUEST_CLIENT_INFO',
+        'TICKET_CLIENT_RESPOND',
+        'TICKET_RESOLVE',
+        'TICKET_CLOSE',
+        'TICKET_CLOSE_ANY',
+        'TICKET_COMMENT',
+        'TICKET_REOPEN'
+    )
+WHERE r.role_name = 'ADMIN'
+ON CONFLICT DO NOTHING;
+
+
+-- File: inserts/B1-Permissions.sql
+-- =========================================================
+-- ASSIGN PERMISSIONS TO CLIENT
+-- =========================================================
+INSERT INTO ctl_roles_permissions (role_id, permission_id)
+SELECT r.role_id, p.permission_id
+FROM cat_roles r
+JOIN cat_permissions p 
+    ON p.permission_name IN (
+        'TICKET_CREATE',
+        'TICKET_READ_OWN',
+        'TICKET_CLIENT_RESPOND',
+        'TICKET_CLOSE',
+        'TICKET_COMMENT',
+        'TICKET_REOPEN'
+    )
+WHERE r.role_name = 'CLIENT'
+ON CONFLICT DO NOTHING;
+
+
+-- =========================================================
+-- ASSIGN PERMISSIONS TO AGENT
+-- =========================================================
+INSERT INTO ctl_roles_permissions (role_id, permission_id)
+SELECT r.role_id, p.permission_id
+FROM cat_roles r
+JOIN cat_permissions p 
+    ON p.permission_name IN (
+        'TICKET_READ_ALL',
+        'TICKET_START_PROGRESS',
+        'TICKET_REQUEST_CLIENT_INFO',
+        'TICKET_RESOLVE',
+        'TICKET_COMMENT'
+    )
+WHERE r.role_name = 'AGENT'
+ON CONFLICT DO NOTHING;
+
+
+-- =========================================================
+-- ASSIGN PERMISSIONS TO ADMIN
+-- =========================================================
+INSERT INTO ctl_roles_permissions (role_id, permission_id)
+SELECT r.role_id, p.permission_id
+FROM cat_roles r
+JOIN cat_permissions p 
+    ON p.permission_name IN (
+        'TICKET_CREATE',
+        'TICKET_READ_OWN',
+        'TICKET_READ_ALL',
+        'TICKET_ASSIGN',
+        'TICKET_START_PROGRESS',
+        'TICKET_REQUEST_CLIENT_INFO',
+        'TICKET_CLIENT_RESPOND',
+        'TICKET_RESOLVE',
+        'TICKET_CLOSE',
+        'TICKET_CLOSE_ANY',
+        'TICKET_COMMENT',
+        'TICKET_REOPEN'
+    )
+WHERE r.role_name = 'ADMIN'
+ON CONFLICT DO NOTHING;
+
+
+-- =========================================================
+-- FINAL TICKET STATUS TRANSITIONS
 -- =========================================================
 
-INSERT INTO ctl_ticket_status_transitions (
-    from_status,
-    to_status,
-    role_id
-)
-SELECT fs.status_id, ts.status_id, r.role_id
-FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.status_code = 'ASSIGNED'
-JOIN cat_roles r ON r.role_name = 'ADMIN'
-WHERE fs.status_code = 'CREATED';
+INSERT INTO ctl_ticket_status_transitions 
+(from_status, to_status, permission_id)
+VALUES
+-- CREATED -> ASSIGNED
+(
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'CREATED'),
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'ASSIGNED'),
+    (SELECT permission_id FROM cat_permissions WHERE permission_name = 'TICKET_ASSIGN')
+),
 
-INSERT INTO ctl_ticket_status_transitions (
-    from_status,
-    to_status,
-    role_id
-)
-SELECT fs.status_id, ts.status_id, r.role_id
-FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.status_code = 'IN_PROGRESS'
-JOIN cat_roles r ON r.role_name = 'AGENT'
-WHERE fs.status_code = 'ASSIGNED';
+-- ASSIGNED -> IN_PROGRESS
+(
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'ASSIGNED'),
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'IN_PROGRESS'),
+    (SELECT permission_id FROM cat_permissions WHERE permission_name = 'TICKET_START_PROGRESS')
+),
 
-INSERT INTO ctl_ticket_status_transitions (
-    from_status,
-    to_status,
-    role_id
-)
-SELECT fs.status_id, ts.status_id, r.role_id
-FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.status_code = 'WAITING_FOR_CLIENT'
-JOIN cat_roles r ON r.role_name = 'AGENT'
-WHERE fs.status_code = 'IN_PROGRESS';
+-- IN_PROGRESS -> WAITING_FOR_CLIENT
+(
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'IN_PROGRESS'),
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'WAITING_FOR_CLIENT'),
+    (SELECT permission_id FROM cat_permissions WHERE permission_name = 'TICKET_REQUEST_CLIENT_INFO')
+),
 
-INSERT INTO ctl_ticket_status_transitions (
-    from_status,
-    to_status,
-    role_id
-)
-SELECT fs.status_id, ts.status_id, r.role_id
-FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.status_code = 'IN_PROGRESS'
-JOIN cat_roles r ON r.role_name = 'CLIENT'
-WHERE fs.status_code = 'WAITING_FOR_CLIENT';
+-- WAITING_FOR_CLIENT -> IN_PROGRESS
+(
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'WAITING_FOR_CLIENT'),
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'IN_PROGRESS'),
+    (SELECT permission_id FROM cat_permissions WHERE permission_name = 'TICKET_CLIENT_RESPOND')
+),
 
-INSERT INTO ctl_ticket_status_transitions (
-    from_status,
-    to_status,
-    role_id
-)
-SELECT fs.status_id, ts.status_id, r.role_id
-FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.status_code = 'RESOLVED'
-JOIN cat_roles r ON r.role_name = 'CLIENT'
-WHERE fs.status_code = 'WAITING_FOR_CLIENT';
+-- IN_PROGRESS -> RESOLVED
+(
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'IN_PROGRESS'),
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'RESOLVED'),
+    (SELECT permission_id FROM cat_permissions WHERE permission_name = 'TICKET_RESOLVE')
+),
 
-INSERT INTO ctl_ticket_status_transitions (
-    from_status,
-    to_status,
-    role_id
-)
-SELECT fs.status_id, ts.status_id, r.role_id
-FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.status_code = 'RESOLVED'
-JOIN cat_roles r ON r.role_name = 'AGENT'
-WHERE fs.status_code = 'IN_PROGRESS';
+-- RESOLVED -> CLOSED
+(
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'RESOLVED'),
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'CLOSED'),
+    (SELECT permission_id FROM cat_permissions WHERE permission_name = 'TICKET_CLOSE')
+),
 
-INSERT INTO ctl_ticket_status_transitions (
-    from_status,
-    to_status,
-    role_id
+-- CREATED -> CLOSED
+(
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'CREATED'),
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'CLOSED'),
+    (SELECT permission_id FROM cat_permissions WHERE permission_name = 'TICKET_CLOSE_ANY')
+),
+
+-- ASSIGNED -> CLOSED
+(
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'ASSIGNED'),
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'CLOSED'),
+    (SELECT permission_id FROM cat_permissions WHERE permission_name = 'TICKET_CLOSE_ANY')
+),
+
+-- IN_PROGRESS -> CLOSED
+(
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'IN_PROGRESS'),
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'CLOSED'),
+    (SELECT permission_id FROM cat_permissions WHERE permission_name = 'TICKET_CLOSE_ANY')
+),
+
+-- WAITING_FOR_CLIENT -> CLOSED
+(
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'WAITING_FOR_CLIENT'),
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'CLOSED'),
+    (SELECT permission_id FROM cat_permissions WHERE permission_name = 'TICKET_CLOSE_ANY')
+),
+
+-- RESOLVED -> IN_PROGRESS
+(
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'RESOLVED'),
+    (SELECT status_id FROM cat_ticket_statuses WHERE status_code = 'IN_PROGRESS'),
+    (SELECT permission_id FROM cat_permissions WHERE permission_name = 'TICKET_REOPEN')
 )
-SELECT fs.status_id, ts.status_id, r.role_id
-FROM cat_ticket_statuses fs
-JOIN cat_ticket_statuses ts ON ts.status_code = 'CLOSED'
-JOIN cat_roles r ON r.role_name = 'ADMIN'
-WHERE fs.status_code = 'RESOLVED';
+ON CONFLICT DO NOTHING;
+
+
+-- File: inserts/U1 - users.sql
+INSERT INTO mas_users (
+    user_name,
+    user_lastname,
+    email,
+    role_id,
+    hash_password
+)
+VALUES (
+    'Carlos',
+    'Cliente Demo',
+    'cliente.demo@e4-support.com',
+    (SELECT role_id FROM cat_roles WHERE role_name = 'CLIENT'),
+    '$2b$10$pC6tjCsWcvonPLkeeJRb4O65dgI8La.lDxNa44XLO.WycMg4YVYFi'
+);
+
+INSERT INTO mas_users (
+    user_name,
+    user_lastname,
+    email,
+    role_id,
+    hash_password
+)
+VALUES (
+    'Ana',
+    'Agente Demo',
+    'agente.demo@e4-support.com',
+    (SELECT role_id FROM cat_roles WHERE role_name = 'AGENT'),
+    '$2b$10$0PSw1vxkCU1X8ELVwEoDYOxdXxX0ntMp.pSXlps7AaQI542.4zDBa'
+);
+
+INSERT INTO mas_users (
+    user_name,
+    user_lastname,
+    email,
+    role_id,
+    hash_password
+)
+VALUES (
+    'Admin',
+    'Sistema',
+    'admin.demo@e4-support.com',
+    (SELECT role_id FROM cat_roles WHERE role_name = 'ADMIN'),
+    '$2b$10$QzBxgev8Z79HGfohchYR/eoUilUzntE5d8sgxTMmMXgOG9N0u/MAq'
+);
+
+
+-- File: inserts/mock-data.sql
+
 
 
 -- ============================================================
@@ -462,19 +474,27 @@ CREATE USER app_user WITH PASSWORD 'app_secure_password';
 
 GRANT USAGE ON SCHEMA public TO app_user;
 
--- Permisos explicitos sobre cada tabla
+-- Tablas de catálogo (solo lectura)
 GRANT SELECT ON TABLE public.cat_permissions TO app_user;
 GRANT SELECT ON TABLE public.cat_roles TO app_user;
 GRANT SELECT ON TABLE public.cat_ticket_statuses TO app_user;
-GRANT SELECT ON TABLE public.mas_users TO app_user;
-GRANT SELECT ON TABLE public.mas_tickets TO app_user;
-GRANT SELECT ON TABLE public.mas_comments TO app_user;
 GRANT SELECT ON TABLE public.ctl_ticket_status_transitions TO app_user;
-GRANT SELECT ON TABLE public.cat_permissions_roles TO app_user;
-GRANT SELECT ON TABLE public.mas_tickets_mas_users TO app_user;
-GRANT SELECT ON TABLE public.mas_tickets_comments TO app_user;
-GRANT SELECT ON TABLE public.his_ticket_status_changes TO app_user;
-GRANT SELECT ON TABLE public.his_assignation_changes TO app_user;
+GRANT SELECT ON TABLE public.ctl_roles_permissions TO app_user;
+
+-- Usuarios (lectura para autenticación)
+GRANT SELECT ON TABLE public.mas_users TO app_user;
+
+-- Tickets (lectura y escritura)
+GRANT SELECT, INSERT, UPDATE ON TABLE public.mas_tickets TO app_user;
+GRANT SELECT, INSERT ON TABLE public.mas_tickets_mas_users TO app_user;
+
+-- Comentarios (lectura y escritura)
+GRANT SELECT, INSERT ON TABLE public.mas_comments TO app_user;
+GRANT SELECT, INSERT ON TABLE public.mas_tickets_comments TO app_user;
+
+-- Historial (solo inserción)
+GRANT SELECT, INSERT ON TABLE public.his_ticket_status_changes TO app_user;
+GRANT SELECT, INSERT ON TABLE public.his_assignation_changes TO app_user;
 
 -- Permisos de USAGE para secuencias (necesario con columnas SERIAL)
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;

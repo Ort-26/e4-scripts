@@ -1,4 +1,4 @@
---DB: cloudops-swb-db
+--DB: e4-support-db
 
 -- 1. CATÁLOGOS BASE (Tablas maestras independientes)
 
@@ -43,6 +43,7 @@ CREATE TABLE mas_tickets (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status_id INTEGER,
+    agent_id INTEGER DEFAULT NULL,
     CONSTRAINT fk_mas_tickets_cat_ticket_statuses FOREIGN KEY (status_id) 
         REFERENCES cat_ticket_statuses(status_id)
 );
@@ -60,27 +61,36 @@ CREATE TABLE mas_comments (
 -- 3. TABLAS DE CONTROL Y TRANSICIONES
 
 CREATE TABLE ctl_ticket_status_transitions (
-    transition_id SERIAL PRIMARY KEY, -- Modificado a SERIAL
-    from_status INTEGER,
-    to_status INTEGER,
-    role_id INTEGER,
-    CONSTRAINT fk_ctl_transitions_from_status FOREIGN KEY (from_status) 
+    transition_id SERIAL PRIMARY KEY,
+    from_status INTEGER NOT NULL,
+    to_status INTEGER NOT NULL,
+    permission_id INTEGER NOT NULL,
+
+    CONSTRAINT fk_ctl_transitions_from_status 
+        FOREIGN KEY (from_status) 
         REFERENCES cat_ticket_statuses(status_id),
-    CONSTRAINT fk_ctl_transitions_to_status FOREIGN KEY (to_status) 
+
+    CONSTRAINT fk_ctl_transitions_to_status 
+        FOREIGN KEY (to_status) 
         REFERENCES cat_ticket_statuses(status_id),
-    CONSTRAINT fk_ctl_transitions_cat_roles FOREIGN KEY (role_id) 
-        REFERENCES cat_roles(role_id)
+
+    CONSTRAINT fk_ctl_transitions_cat_permissions 
+        FOREIGN KEY (permission_id) 
+        REFERENCES cat_permissions(permission_id),
+
+    CONSTRAINT uq_ticket_status_transition_permission 
+        UNIQUE (from_status, to_status, permission_id)
 );
 
 -- 4. TABLAS INTERMEDIAS (Se mantienen con INTEGER para la PK compuesta)
 
-CREATE TABLE cat_permissions_roles (
+CREATE TABLE ctl_roles_permissions (
     permission_id INTEGER,
     role_id INTEGER,
     PRIMARY KEY (permission_id, role_id),
-    CONSTRAINT fk_cat_permissions_roles_cat_permissions FOREIGN KEY (permission_id) 
+    CONSTRAINT fk_ctl_roles_permissions_cat_permissions FOREIGN KEY (permission_id) 
         REFERENCES cat_permissions(permission_id),
-    CONSTRAINT fk_cat_permissions_roles_cat_roles FOREIGN KEY (role_id) 
+    CONSTRAINT fk_ctl_roles_permissions_cat_roles FOREIGN KEY (role_id) 
         REFERENCES cat_roles(role_id)
 );
 
@@ -88,9 +98,9 @@ CREATE TABLE mas_tickets_mas_users (
     user_id INTEGER,
     ticket_id INTEGER,
     PRIMARY KEY (user_id, ticket_id),
-    CONSTRAINT fk_mas_tickets_users_mas_users FOREIGN KEY (user_id) 
+    CONSTRAINT fk_mas_tickets_mas_users_mas_users FOREIGN KEY (user_id) 
         REFERENCES mas_users(user_id),
-    CONSTRAINT fk_mas_tickets_users_mas_tickets FOREIGN KEY (ticket_id) 
+    CONSTRAINT fk_mas_tickets_mas_users_mas_tickets FOREIGN KEY (ticket_id) 
         REFERENCES mas_tickets(ticket_id)
 );
 
