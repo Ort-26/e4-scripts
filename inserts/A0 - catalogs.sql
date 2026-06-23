@@ -36,7 +36,7 @@ VALUES
 ('TICKET_RESOLVE', 'Can resolve tickets'),
 ('TICKET_CLOSE', 'Can close resolved tickets'),
 ('TICKET_CLOSE_ANY', 'Can force close tickets from non-final states'),
-('TICKET_COMMENT', 'Can add comments to tickets')
+('TICKET_COMMENT', 'Can add comments to tickets'),
 ('TICKET_REOPEN', 'Can reopen a resolved ticket')
 ON CONFLICT DO NOTHING;
 
@@ -46,64 +46,3 @@ ON CONFLICT DO NOTHING;
 -- =========================================================
 -- PERMISSIONS - ROLES
 -- =========================================================
-
--- =========================================================
--- ASSIGN PERMISSIONS TO CLIENT
--- =========================================================
-INSERT INTO ctl_roles_permissions (role_id, permission_id)
-SELECT r.role_id, p.permission_id
-FROM cat_roles r
-JOIN cat_permissions p 
-    ON p.permission_name IN (
-        'TICKET_CREATE',
-        'TICKET_READ_OWN',
-        'TICKET_CLIENT_RESPOND',
-        'TICKET_CLOSE',
-        'TICKET_COMMENT',
-        'TICKET_REOPEN'
-    )
-WHERE r.role_name = 'CLIENT'
-ON CONFLICT DO NOTHING;
-
-
--- =========================================================
--- ASSIGN PERMISSIONS TO AGENT
--- =========================================================
-INSERT INTO ctl_roles_permissions (role_id, permission_id)
-SELECT r.role_id, p.permission_id
-FROM cat_roles r
-JOIN cat_permissions p 
-    ON p.permission_name IN (
-        'TICKET_READ_ALL',
-        'TICKET_START_PROGRESS',
-        'TICKET_REQUEST_CLIENT_INFO',
-        'TICKET_RESOLVE',
-        'TICKET_COMMENT'
-    )
-WHERE r.role_name = 'AGENT'
-ON CONFLICT DO NOTHING;
-
-
--- =========================================================
--- ASSIGN PERMISSIONS TO ADMIN
--- =========================================================
-INSERT INTO ctl_roles_permissions (role_id, permission_id)
-SELECT r.role_id, p.permission_id
-FROM cat_roles r
-JOIN cat_permissions p 
-    ON p.permission_name IN (
-        'TICKET_CREATE',
-        'TICKET_READ_OWN',
-        'TICKET_READ_ALL',
-        'TICKET_ASSIGN',
-        'TICKET_START_PROGRESS',
-        'TICKET_REQUEST_CLIENT_INFO',
-        'TICKET_CLIENT_RESPOND',
-        'TICKET_RESOLVE',
-        'TICKET_CLOSE',
-        'TICKET_CLOSE_ANY',
-        'TICKET_COMMENT',
-        'TICKET_REOPEN'
-    )
-WHERE r.role_name = 'ADMIN'
-ON CONFLICT DO NOTHING;

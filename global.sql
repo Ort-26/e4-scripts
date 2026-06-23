@@ -192,7 +192,7 @@ VALUES
 ('TICKET_RESOLVE', 'Can resolve tickets'),
 ('TICKET_CLOSE', 'Can close resolved tickets'),
 ('TICKET_CLOSE_ANY', 'Can force close tickets from non-final states'),
-('TICKET_COMMENT', 'Can add comments to tickets')
+('TICKET_COMMENT', 'Can add comments to tickets'),
 ('TICKET_REOPEN', 'Can reopen a resolved ticket')
 ON CONFLICT DO NOTHING;
 
